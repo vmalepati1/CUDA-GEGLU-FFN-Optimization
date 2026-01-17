@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import time
+import torch.profiler
 
 class GEGLU_FFN(nn.Module):
     def __init__(self, hidden_size=4096, intermediate_size=12288):
@@ -35,8 +36,15 @@ for B in batch_sizes:
     # GPU sync before timing
     torch.cuda.synchronize()
     start = time.perf_counter()
+    
+    with torch.profiler.profile(
+        activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
+        profile_memory=True,
+        record_shapes=True
+    ) as prof:
+        y = ffn(x)
 
-    y = ffn(x)
+    print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
 
     print("y dtype:", y.dtype)
     
