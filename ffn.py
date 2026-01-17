@@ -37,6 +37,8 @@ for B in batch_sizes:
     start = time.perf_counter()
 
     y = ffn(x)
+
+    print("y dtype:", y.dtype)
     
     torch.cuda.synchronize()
     end = time.perf_counter()
