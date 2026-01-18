@@ -22,7 +22,7 @@ __device__ void loadFromGmem(int N, int K, const float *__restrict__ A,
                              float *__restrict__ As, float *__restrict__ Bs, 
                              int innerRowA, int innerColA,
                              int innerRowB, int innerColB) {
-  for (unsigned int offset = 0; offset + rowStrideA <= BM; offset += rowStrideA) {
+  for (unsigned int offset = 0; offset <= BM - rowStrideA; offset += rowStrideA) {
     const float4 tmp = reinterpret_cast<const float4 *>(
         &A[(innerRowA + offset) * K + innerColA * 4])[0];
     As[(innerColA * 4 + 0) * BM + innerRowA + offset] = tmp.x;
@@ -31,7 +31,7 @@ __device__ void loadFromGmem(int N, int K, const float *__restrict__ A,
     As[(innerColA * 4 + 3) * BM + innerRowA + offset] = tmp.w;
   }
 
-  for (unsigned int offset = 0; offset + rowStrideB <= BK; offset += rowStrideB) {
+  for (unsigned int offset = 0; offset <= BK - rowStrideB; offset += rowStrideB) {
     reinterpret_cast<float4 *>(
         &Bs[(innerRowB + offset) * BN + innerColB * 4])[0] =
         reinterpret_cast<const float4 *>(
@@ -191,11 +191,11 @@ __global__ void __launch_bounds__(NUM_THREADS)
 float *compareKernelAndCUBLAS(int m, int k, int n)
 {
     size_t sizeA = m * k * sizeof(float);
-    size_t sizeB = k * n * sizeof(float);
+    size_t sizeBT = n * k * sizeof(float);
     size_t sizeC = m * n * sizeof(float);
 
     float *hA = new float[m * k];
-    float *hB = new float[k * n];
+    float *hBT = new float[n * k];
     float *hC = new float[m * n];
     float *hCRef = new float[m * n];
 
@@ -203,15 +203,15 @@ float *compareKernelAndCUBLAS(int m, int k, int n)
     std::uniform_real_distribution<float> dist(1.0f, 1000.0f);
 
     for (int i = 0; i < m * k; i++) hA[i] = dist(gen);
-    for (int i = 0; i < k * n; i++) hB[i] = dist(gen);
+    for (int i = 0; i < n * k; i++) hBT[i] = dist(gen);
 
-    float *dA, *dB, *dC;
+    float *dA, *dBT, *dC;
     cudaMalloc(&dA, sizeA);
-    cudaMalloc(&dB, sizeB);
+    cudaMalloc(&dBT, sizeBT);
     cudaMalloc(&dC, sizeC);
 
     cudaMemcpy(dA, hA, sizeA, cudaMemcpyHostToDevice);
-    cudaMemcpy(dB, hB, sizeB, cudaMemcpyHostToDevice);
+    cudaMemcpy(dBT, hBT, sizeBT, cudaMemcpyHostToDevice);
 
     // Custom kernel setup
     const unsigned int WARPSIZE = 32;
@@ -229,6 +229,7 @@ float *compareKernelAndCUBLAS(int m, int k, int n)
         const unsigned int K10_TN = 4;
     */
 
+    // B = 32
     const unsigned int K10_NUM_THREADS = 32;
     const unsigned int K10_BM = 32;
     const unsigned int K10_BN = 128;
@@ -287,15 +288,15 @@ float *compareKernelAndCUBLAS(int m, int k, int n)
     for (int i = 0; i < WARMUP_ITERS; i++) {
         sgemmWarptiling<K10_BM, K10_BN, K10_BK, K10_WM, K10_WN, K10_WNITER, K10_TM,
                   K10_TN, K10_NUM_THREADS>
-          <<<gridDim, blockDim>>>(m, n, k, alpha, dA, dB, beta, dC);
+          <<<gridDim, blockDim>>>(m, n, k, alpha, dA, dBT, beta, dC);
     }
 
     for (int i = 0; i < WARMUP_ITERS; i++) {
         cublasSgemm(handle,
-                    CUBLAS_OP_N, CUBLAS_OP_N,
+                    CUBLAS_OP_T, CUBLAS_OP_N,
                     n, m, k,
                     &alpha,
-                    dB, n,
+                    dBT, n,
                     dA, k,
                     &beta,
                     dC, n);
@@ -314,7 +315,7 @@ float *compareKernelAndCUBLAS(int m, int k, int n)
     for (int i = 0; i < BENCH_ITERS; i++) {
         sgemmWarptiling<K10_BM, K10_BN, K10_BK, K10_WM, K10_WN, K10_WNITER, K10_TM,
                   K10_TN, K10_NUM_THREADS>
-          <<<gridDim, blockDim>>>(m, n, k, alpha, dA, dB, beta, dC);
+          <<<gridDim, blockDim>>>(m, n, k, alpha, dA, dBT, beta, dC);
     }
     cudaEventRecord(end);
     cudaEventSynchronize(end);
@@ -331,10 +332,10 @@ float *compareKernelAndCUBLAS(int m, int k, int n)
     cudaEventRecord(start);
     for (int i = 0; i < BENCH_ITERS; i++) {
         cublasSgemm(handle,
-                    CUBLAS_OP_N, CUBLAS_OP_N,
+                    CUBLAS_OP_T, CUBLAS_OP_N,
                     n, m, k,
                     &alpha,
-                    dB, n,
+                    dBT, n,
                     dA, k,
                     &beta,
                     dC, n);
