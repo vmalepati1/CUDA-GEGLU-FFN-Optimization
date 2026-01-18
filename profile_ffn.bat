@@ -1,0 +1,1 @@
+ncu --target-processes all python ffn.py
