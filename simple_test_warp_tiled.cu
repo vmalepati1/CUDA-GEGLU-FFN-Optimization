@@ -41,7 +41,6 @@ float *compareKernelAndCUBLAS(int m, int k, int n)
     cudaMemcpy(dBT, hBT, sizeBT, cudaMemcpyHostToDevice);
 
     // Custom kernel setup
-    const unsigned int WARPSIZE = 32;
 
     /* GOOD PARAMETERS */
     /*
@@ -109,9 +108,6 @@ float *compareKernelAndCUBLAS(int m, int k, int n)
     const float alpha = 1.0f;
     const float beta  = 0.0f;
 
-    // --------------------
-    // Warm-up
-    // --------------------
     for (int i = 0; i < WARMUP_ITERS; i++) {
         sgemmWarptiling_BT<K10_BM, K10_BN, K10_BK, K10_WM, K10_WN, K10_WNITER, K10_TM,
                   K10_TN, K10_NUM_THREADS>
@@ -136,9 +132,6 @@ float *compareKernelAndCUBLAS(int m, int k, int n)
     cudaEventCreate(&start);
     cudaEventCreate(&end);
 
-    // --------------------
-    // Benchmark custom kernel
-    // --------------------
     cudaEventRecord(start);
     for (int i = 0; i < BENCH_ITERS; i++) {
         sgemmWarptiling_BT<K10_BM, K10_BN, K10_BK, K10_WM, K10_WN, K10_WNITER, K10_TM,
@@ -154,9 +147,6 @@ float *compareKernelAndCUBLAS(int m, int k, int n)
 
     cudaMemcpy(hC, dC, sizeC, cudaMemcpyDeviceToHost);
 
-    // --------------------
-    // Benchmark cuBLAS
-    // --------------------
     cudaEventRecord(start);
     for (int i = 0; i < BENCH_ITERS; i++) {
         cublasSgemm(handle,
@@ -177,9 +167,6 @@ float *compareKernelAndCUBLAS(int m, int k, int n)
 
     cudaMemcpy(hCRef, dC, sizeC, cudaMemcpyDeviceToHost);
 
-    // --------------------
-    // Validation
-    // --------------------
     int errors = 0;
     const float relTol = 1e-5f;
     const float absTol = 1e-3f;
@@ -216,9 +203,9 @@ float *compareKernelAndCUBLAS(int m, int k, int n)
 
 int main()
 {
-    int m = 4;
-    int k = 4096;
-    int n = 12288;
+    int m = 32;
+    int k = 12288;
+    int n = 4096;
 
     float *runtimes = compareKernelAndCUBLAS(m, k, n);
 

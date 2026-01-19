@@ -62,11 +62,11 @@ void benchmark(int B) {
     }
 
     // Stage 2: Y = H @ Wo^T
-    // if (B <= 32) {
-    //     launch_stage2<32, 128, 32, 16, 32, 2, 2, 4, 256>(B, intermediate_size, hidden_size, dH, dWo, dY);
-    // } else {
-    //     launch_stage2<128, 128, 16, 64, 64, 4, 8, 4, 128>(B, intermediate_size, hidden_size, dH, dWo, dY);
-    // }
+    if (B <= 32) {
+        launch_stage2<32, 128, 32, 16, 32, 2, 2, 4, 256>(B, intermediate_size, hidden_size, dH, dWo, dY);
+    } else {
+        launch_stage2<128, 128, 16, 64, 64, 4, 8, 4, 128>(B, intermediate_size, hidden_size, dH, dWo, dY);
+    }
 
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
